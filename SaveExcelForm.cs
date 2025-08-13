@@ -286,257 +286,133 @@ namespace count_dead_sign
                                 AfternoonSum = afternoonDict.ContainsKey(room) ? afternoonDict[room].Sum() : 0
                             }).ToList();
 
-                            var highRisk = roomDataList.Where(r => r.MorningSum >= 10 || r.AfternoonSum >= 10).ToList();
-                            var midRisk = roomDataList.Where(r => (r.MorningSum >= 4 && r.MorningSum <= 9) || (r.AfternoonSum >= 4 && r.AfternoonSum <= 9)).ToList();
-                            var lowRisk = roomDataList.Where(r => r.MorningSum <= 3 && r.AfternoonSum <= 3).ToList();
+                            //var highRisk = roomDataList.Where(r => r.MorningSum >= 10 || r.AfternoonSum >= 10).ToList();
+                            //var midRisk = roomDataList.Where(r => (r.MorningSum >= 4 && r.MorningSum <= 9) || (r.AfternoonSum >= 4 && r.AfternoonSum <= 9)).ToList();
+                            //var lowRisk = roomDataList.Where(r => r.MorningSum <= 3 && r.AfternoonSum <= 3).ToList();
 
                             int totalCount = roomDataList.Count(); // 각 병원 별 병실 전체 카운트 값
 
                             int currentRow = 3;
 
-                            void WriteGroup(string groupName, List<RoomData> groupList, int totalCount)
-                            {
-                                if (groupList.Count == 0)
-                                    return;
+        int WriteGroup(string groupName, List<RoomData> groupList, int totalCount, int startCol, int startRow)
+        {
+            if (groupList.Count == 0)
+                return startRow;
+                
+            int currentRow = startRow;
+            
+            // 위험군별 배경색 설정
+            Color bgColor = Color.White;
+            if (groupName.Contains("고위험")) bgColor = Color.FromArgb(255, 200, 200);      // 연한 빨강
+            else if (groupName.Contains("중위험")) bgColor = Color.FromArgb(255, 255, 200); // 연한 노랑
+            else if (groupName.Contains("저위험")) bgColor = Color.FromArgb(200, 255, 200);    // 연한 초록
+            
+            // 그룹명을 startCol 위치에 설정 (모든 위험군 공통)
+            ws.Cells[currentRow, startCol].Value = groupName;
+            
+            // 데이터 처리
+            foreach (var item in groupList)
+            {
+                // 병실명
+                ws.Cells[currentRow, startCol + 1].Value = item.Room;
+                
+                // 위험군별 조건에 따른 데이터 입력
+                if (groupName.Contains("고위험"))
+                {
+                    ws.Cells[currentRow, startCol + 2].Value = item.MorningSum > 9 ? (object)item.MorningSum : "";
+                    ws.Cells[currentRow, startCol + 3].Value = item.AfternoonSum > 9 ? (object)item.AfternoonSum : "";
+                }
+                else if (groupName.Contains("중위험"))
+                {
+                    ws.Cells[currentRow, startCol + 2].Value = (3 < item.MorningSum && item.MorningSum < 10) ? (object)item.MorningSum : "";
+                    ws.Cells[currentRow, startCol + 3].Value = (3 < item.AfternoonSum && item.AfternoonSum < 10) ? (object)item.AfternoonSum : "";
+                }
+                else if (groupName.Contains("저위험"))
+                {
+                    ws.Cells[currentRow, startCol + 2].Value = item.MorningSum < 4 ? (object)item.MorningSum : "";
+                    ws.Cells[currentRow, startCol + 3].Value = item.AfternoonSum < 4 ? (object)item.AfternoonSum : "";
+                }
+                
+                // 홀짝 줄 배경색 (줄무늬 효과)
+                var rowColor = (currentRow % 2 == 0) ? Color.White : Color.FromArgb(240, 240, 240);
+                ws.Cells[currentRow, startCol + 1, currentRow, startCol + 3].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[currentRow, startCol + 1, currentRow, startCol + 3].Style.Fill.BackgroundColor.SetColor(rowColor);
+                
+                // 정렬
+                ws.Cells[currentRow, startCol + 2, currentRow, startCol + 3].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Right;
+                ws.Cells[currentRow, startCol + 1].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+                
+                currentRow++;
+            }
+            
+            // 그룹명 병합 및 스타일 (데이터 처리 후에 적용)
+            if (groupList.Count > 0)
+            {
+                ws.Cells[startRow, startCol, currentRow - 1, startCol].Merge = true;
+                ws.Cells[startRow, startCol, currentRow - 1, startCol].Style.VerticalAlignment = OfficeOpenXml.Style.ExcelVerticalAlignment.Top;
+                ws.Cells[startRow, startCol, currentRow - 1, startCol].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+                ws.Cells[startRow, startCol, currentRow - 1, startCol].Style.Font.Bold = true;
+                ws.Cells[startRow, startCol, currentRow - 1, startCol].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[startRow, startCol, currentRow - 1, startCol].Style.Fill.BackgroundColor.SetColor(Color.White);
+            }
+            
+            // 통계 계산
+            int morningCount = 0, afternoonCount = 0;
+            if (groupName.Contains("고위험"))
+            {
+                morningCount = groupList.Count(x => x.MorningSum > 9);
+                afternoonCount = groupList.Count(x => x.AfternoonSum > 9);
+            }
+            else if (groupName.Contains("중위험"))
+            {
+                morningCount = groupList.Count(x => 3 < x.MorningSum && x.MorningSum < 10);
+                afternoonCount = groupList.Count(x => 3 < x.AfternoonSum && x.AfternoonSum < 10);
+            }
+            else if (groupName.Contains("저위험"))
+            {
+                morningCount = groupList.Count(x => x.MorningSum < 4);
+                afternoonCount = groupList.Count(x => x.AfternoonSum < 4);
+            }
+            
+            // 발생 횟수 행
+            ws.Cells[currentRow, startCol].Value = $"{groupName} 발생 횟수";
+            ws.Cells[currentRow, startCol + 2].Value = $"{morningCount} 회";
+            ws.Cells[currentRow, startCol + 3].Value = $"{afternoonCount} 회";
+            ws.Cells[currentRow, startCol, currentRow, startCol + 3].Style.Font.Bold = true;
+            ws.Cells[currentRow, startCol, currentRow, startCol + 3].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+            ws.Cells[currentRow, startCol, currentRow, startCol + 3].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+            ws.Cells[currentRow, startCol, currentRow, startCol + 3].Style.Fill.BackgroundColor.SetColor(bgColor);
+            currentRow++;
+            
+            // 발생 비율 행
+            ws.Cells[currentRow, startCol].Value = $"{groupName} 발생 비율 (%)";
+            ws.Cells[currentRow, startCol + 2].Value = totalCount > 0 ? (double)morningCount / totalCount : 0;
+            ws.Cells[currentRow, startCol + 3].Value = totalCount > 0 ? (double)afternoonCount / totalCount : 0;
+            ws.Cells[currentRow, startCol + 2, currentRow, startCol + 3].Style.Numberformat.Format = "0.0%";
+            ws.Cells[currentRow, startCol, currentRow, startCol + 3].Style.Font.Bold = true;
+            ws.Cells[currentRow, startCol, currentRow, startCol + 3].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+            ws.Cells[currentRow, startCol, currentRow, startCol + 3].Style.Fill.BackgroundColor.SetColor(bgColor);
+            ws.Cells[currentRow, startCol, currentRow, startCol + 3].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+            currentRow++;
+            
+            // 그룹 경계 테두리
+            var groupRange = ws.Cells[startRow, startCol, currentRow - 1, startCol + 3];
+            groupRange.Style.Border.Top.Style = OfficeOpenXml.Style.ExcelBorderStyle.Medium;
+            groupRange.Style.Border.Bottom.Style = OfficeOpenXml.Style.ExcelBorderStyle.Medium;
+            groupRange.Style.Border.Left.Style = OfficeOpenXml.Style.ExcelBorderStyle.Medium;
+            groupRange.Style.Border.Right.Style = OfficeOpenXml.Style.ExcelBorderStyle.Medium;
+            
+            currentRow++; // 그룹 간 한 줄 공백
+            return currentRow;
+        }
 
-                                int startRow = currentRow;
+                            //int totalCounts = roomDataList.Select(x => x.Room).Distinct().Count();
+                            int row = 3;
+                            WriteGroup("고위험군 (10회 이상)", roomDataList, totalCount,1,row);
+                            WriteGroup("중위험군 (4~9회)", roomDataList, totalCount,6,row);
+                            WriteGroup("저위험군 (0~3회)", roomDataList, totalCount,11,row);
 
-                                // 그룹명 병합 및 스타일
-                                ws.Cells[currentRow, 1].Value = groupName;
-                                ws.Cells[currentRow, 1, currentRow + groupList.Count - 1, 1].Merge = true;
-                                ws.Cells[currentRow, 1, currentRow + groupList.Count - 1, 1].Style.VerticalAlignment = OfficeOpenXml.Style.ExcelVerticalAlignment.Center;
-                                ws.Cells[currentRow, 1, currentRow + groupList.Count - 1, 1].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                ws.Cells[currentRow, 1, currentRow + groupList.Count - 1, 1].Style.Font.Bold = true;
-
-                                Color bgColor = Color.White;
-                                if (groupName.Contains("고위험")) bgColor = Color.FromArgb(255, 200, 200);      // 연한 빨강
-                                else if (groupName.Contains("중위험")) bgColor = Color.FromArgb(255, 255, 200); // 연한 노랑
-                                else if (groupName.Contains("저위험")) bgColor = Color.FromArgb(200, 255, 200);    // 연한 초록
-
-                                foreach (var item in groupList)
-                                {
-                                    if (groupName.Contains("고위험"))
-                                    {
-                                        int highDangerMorningSum = item.MorningSum;
-                                        int highDangerAfterSum = item.AfternoonSum;
-
-                                        ws.Cells[currentRow, 2].Value = item.Room;
-
-                                        if (highDangerMorningSum > 9)
-                                        {
-                                            ws.Cells[currentRow, 3].Value = highDangerMorningSum;
-                                        }
-                                        else
-                                        {
-                                            ws.Cells[currentRow, 3].Value = "";  // 오전 셀 빈값 처리
-                                        }
-
-                                        if (highDangerAfterSum > 9)
-                                        {
-                                            ws.Cells[currentRow, 4].Value = highDangerAfterSum;
-                                        }
-                                        else
-                                        {
-                                            ws.Cells[currentRow, 4].Value = "";  // 오후 셀 빈값 처리
-                                        }
-                                        // 홀짝 줄 배경색 (줄무늬 효과)
-                                        var rowColor = (currentRow % 2 == 0) ? Color.White : Color.FromArgb(240, 240, 240);
-                                        ws.Cells[currentRow, 2, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                        ws.Cells[currentRow, 2, currentRow, 4].Style.Fill.BackgroundColor.SetColor(rowColor);
-
-                                        // 정렬
-                                        ws.Cells[currentRow, 3, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Right;
-                                        ws.Cells[currentRow, 2].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-
-                                        currentRow++;
-                                    }
-                                    if (groupName.Contains("중위험"))
-                                    {
-                                        int middleDangerMorningSum = item.MorningSum;
-                                        int middleDangerAfterSum = item.AfternoonSum;
-
-                                        ws.Cells[currentRow, 2].Value = item.Room;
-
-                                        if (3 < middleDangerMorningSum && middleDangerMorningSum < 10)
-                                        {
-                                            ws.Cells[currentRow, 3].Value = middleDangerMorningSum;
-                                        }
-                                        else
-                                        {
-                                            ws.Cells[currentRow, 3].Value = "";  // 오전 셀 빈값 처리
-                                        }
-
-                                        if (3 < middleDangerMorningSum && middleDangerMorningSum < 10)
-                                        {
-                                            ws.Cells[currentRow, 4].Value = middleDangerAfterSum;
-                                        }
-                                        else
-                                        {
-                                            ws.Cells[currentRow, 4].Value = "";  // 오후 셀 빈값 처리
-                                        }
-                                        // 홀짝 줄 배경색 (줄무늬 효과)
-                                        var rowColor = (currentRow % 2 == 0) ? Color.White : Color.FromArgb(240, 240, 240);
-                                        ws.Cells[currentRow, 2, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                        ws.Cells[currentRow, 2, currentRow, 4].Style.Fill.BackgroundColor.SetColor(rowColor);
-
-                                        // 정렬
-                                        ws.Cells[currentRow, 3, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Right;
-                                        ws.Cells[currentRow, 2].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-
-                                        currentRow++;
-                                    }
-                                    if (groupName.Contains("저위험"))
-                                    {
-                                        int lowDangerMorningSum = item.MorningSum;
-                                        int lowDangerAfterSum = item.AfternoonSum;
-
-                                        ws.Cells[currentRow, 2].Value = item.Room;
-
-                                        if (lowDangerMorningSum < 4)
-                                        {
-                                            ws.Cells[currentRow, 3].Value = lowDangerMorningSum;
-                                        }
-                                        else
-                                        {
-                                            ws.Cells[currentRow, 3].Value = "";  // 오전 셀 빈값 처리
-                                        }
-
-                                        if (lowDangerAfterSum < 4)
-                                        {
-                                            ws.Cells[currentRow, 4].Value = lowDangerAfterSum;
-                                        }
-                                        else
-                                        {
-                                            ws.Cells[currentRow, 4].Value = "";  // 오후 셀 빈값 처리
-                                        }
-                                        // 홀짝 줄 배경색 (줄무늬 효과)
-                                        var rowColor = (currentRow % 2 == 0) ? Color.White : Color.FromArgb(240, 240, 240);
-                                        ws.Cells[currentRow, 2, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                        ws.Cells[currentRow, 2, currentRow, 4].Style.Fill.BackgroundColor.SetColor(rowColor);
-
-                                        // 정렬
-                                        ws.Cells[currentRow, 3, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Right;
-                                        ws.Cells[currentRow, 2].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-
-                                        currentRow++;
-                                    }
-                                    
-                                     
-                                }
-
-                                
-                                int totalCounts = totalCount;
-                            
-                                Console.WriteLine($"전체 병원 데이터 :{totalCounts}");
-
-                                if (groupName.Contains("고위험"))
-                                {
-                                    int morningCount = groupList.Count(x => x.MorningSum > 9);
-                                    int afternoonCount = groupList.Count(x => x.AfternoonSum > 9);
-
-                                    // 환자 발생 횟수 행
-                                    ws.Cells[currentRow, 1].Value = "고위험군 발생 횟수";
-                                    ws.Cells[currentRow, 3].Value = $"{morningCount} 회";
-                                    ws.Cells[currentRow, 4].Value = $"{afternoonCount} 회";
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Font.Bold = true;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.BackgroundColor.SetColor(bgColor);
-                                    currentRow++;
-
-                                    // 환자 발생 비율 행
-                                    ws.Cells[currentRow, 1].Value = "고위험군 발생 비율 (%)";
-                                    ws.Cells[currentRow, 3].Value = totalCount > 0 ? (double)morningCount / totalCount : 0;
-                                    ws.Cells[currentRow, 4].Value = totalCount > 0 ? (double)afternoonCount / totalCount : 0;
-                                    ws.Cells[currentRow, 3, currentRow, 4].Style.Numberformat.Format = "0.0%";
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Font.Bold = true;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.BackgroundColor.SetColor(bgColor);
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                    currentRow++;
-
-                                }
-                                else if (groupName.Contains("중위험"))
-                                { 
-                                    int morningCount = groupList.Count(x => 3 < x.MorningSum && x.MorningSum < 10);
-                                    int afternoonCount = groupList.Count(x => 3 < x.AfternoonSumSum && x.AfternoonSumSum < 10);
-
-                                    // 환자 발생 횟수 행
-                                    ws.Cells[currentRow, 1].Value = "고위험군 발생 횟수";
-                                    ws.Cells[currentRow, 3].Value = $"{morningCount} 회";
-                                    ws.Cells[currentRow, 4].Value = $"{afternoonCount} 회";
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Font.Bold = true;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.BackgroundColor.SetColor(bgColor);
-                                    currentRow++;
-
-                                    // 환자 발생 비율 행
-                                    ws.Cells[currentRow, 1].Value = "고위험군 발생 비율 (%)";
-                                    ws.Cells[currentRow, 3].Value = totalCount > 0 ? (double)morningCount / totalCount : 0;
-                                    ws.Cells[currentRow, 4].Value = totalCount > 0 ? (double)afternoonCount / totalCount : 0;
-                                    ws.Cells[currentRow, 3, currentRow, 4].Style.Numberformat.Format = "0.0%";
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Font.Bold = true;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.BackgroundColor.SetColor(bgColor);
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                    currentRow++;
-                                    
-                                }
-                                else
-                                {
-                                    int morningCount = groupList.Count(x => x.MorningSum < 4);
-                                    int afternoonCount = groupList.Count(x => x.AfternoonSum < 4);
-
-                                    // 환자 발생 횟수 행
-                                    ws.Cells[currentRow, 1].Value = "저위험군 발생 횟수";
-                                    ws.Cells[currentRow, 3].Value = $"{morningCount} 회";
-                                    ws.Cells[currentRow, 4].Value = $"{afternoonCount} 회";
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Font.Bold = true;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.BackgroundColor.SetColor(bgColor);
-                                    currentRow++;
-
-                                    // 환자 발생 비율 행
-                                    ws.Cells[currentRow, 1].Value = "저위험군 발생 비율 (%)";
-                                    ws.Cells[currentRow, 3].Value = totalCount > 0 ? (double)morningCount / totalCount : 0;
-                                    ws.Cells[currentRow, 4].Value = totalCount > 0 ? (double)afternoonCount / totalCount : 0;
-                                    ws.Cells[currentRow, 3, currentRow, 4].Style.Numberformat.Format = "0.0%";
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Font.Bold = true;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.BackgroundColor.SetColor(bgColor);
-                                    ws.Cells[currentRow, 1, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-                                    currentRow++;
-                                }
-                                
-
-                                // 그룹 경계 테두리
-                                var groupRange = ws.Cells[startRow, 1, currentRow - 1, 4];
-                                groupRange.Style.Border.Top.Style = OfficeOpenXml.Style.ExcelBorderStyle.Medium;
-                                groupRange.Style.Border.Bottom.Style = OfficeOpenXml.Style.ExcelBorderStyle.Medium;
-                                groupRange.Style.Border.Left.Style = OfficeOpenXml.Style.ExcelBorderStyle.Medium;
-                                groupRange.Style.Border.Right.Style = OfficeOpenXml.Style.ExcelBorderStyle.Medium;
-
-                                currentRow++; // 그룹 간 한 줄 공백
-                            }
-                            int totalCounts = roomDataList.Count();
-                            WriteGroup("고위험군 (10회 이상)", highRisk, totalCounts);
-                            WriteGroup("중위험군 (4~9회)", midRisk, totalCounts);
-                            WriteGroup("저위험군 (0~3회)", lowRisk, totalCounts);
-
-                            // 전체 합계 계산 (필요 시)
-                            //int totalMorning = highRisk.Sum(x => x.MorningSum) + midRisk.Sum(x => x.MorningSum) + lowRisk.Sum(x => x.MorningSum);
-                            //int totalAfternoon = highRisk.Sum(x => x.AfternoonSum) + midRisk.Sum(x => x.AfternoonSum) + lowRisk.Sum(x => x.AfternoonSum);
-
-                            // 전체 합계 행
-                            //ws.Cells[currentRow, 1].Value = "전체 합계";
-                            //ws.Cells[currentRow, 3].Value = totalMorning;
-                            //ws.Cells[currentRow, 4].Value = totalAfternoon;
-                            //ws.Cells[currentRow, 1, currentRow, 4].Style.Font.Bold = true;
-                            //ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                            //ws.Cells[currentRow, 1, currentRow, 4].Style.Fill.BackgroundColor.SetColor(Color.LightYellow);
-                            //ws.Cells[currentRow, 1, currentRow, 4].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+                      
                             currentRow++;
 
                             // 열 너비 자동 조절

@@ -26,37 +26,97 @@ namespace count_dead_sign
         private Dictionary<string, Dictionary<string, List<int>>> hospitalMorningCounts = new Dictionary<string, Dictionary<string, List<int>>>();
         private Dictionary<string, Dictionary<string, List<int>>> hospitalAfternoonCounts = new Dictionary<string, Dictionary<string, List<int>>>();
         private Dictionary<string, Dictionary<string, int>> hospitalTotalCounts = new Dictionary<string, Dictionary<string, int>>();
+        private ProgressBar progressBar;
+        private readonly object logLock = new object();
+        private FlowLayoutPanel mainPanel; 
+        private CircularProgressBar cpb;
 
         public MainForm()
         {
-            // 폼 설정
-            this.Text = "사망위험군 분석 툴";
-            this.Width = 1000;
-            this.Height = 400;
-
-            // 콤보박스 설정
-            comboBox = new ComboBox();
-            comboBox.Location = new System.Drawing.Point(30, 30);
-            comboBox.Width = 200;
-            this.Controls.Add(comboBox);
-
-            // 엑셀 파일 불러오기 버튼
-            loadFileButton = new Button();
-            loadFileButton.Text = "폴더 선택";
-            loadFileButton.Location = new System.Drawing.Point(250, 30);
-            loadFileButton.Click += LoadFileButton_Click;
-            this.Controls.Add(loadFileButton);
-
-            // 결과 처리 버튼
-            resultButton = new Button();
-            resultButton.Text = "시작";
-            resultButton.Location = new System.Drawing.Point(330, 30);
-            resultButton.AutoSize = true;
-            resultButton.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            resultButton.Click += ResultButton_Click;
-            this.Controls.Add(resultButton);
-
+            SetupUI();
         }
+        private void SetupUI()
+    {
+        // 폼 설정
+        this.Text = "사망위험군 분석 툴";
+        this.Width = 300;
+        this.Height = 400;
+        this.StartPosition = FormStartPosition.CenterScreen;
+        this.BackColor = Color.WhiteSmoke;
+
+        // 세로 정렬 패널
+        mainPanel = new FlowLayoutPanel();
+        mainPanel.Dock = DockStyle.Fill;
+        mainPanel.FlowDirection = FlowDirection.TopDown;
+        mainPanel.WrapContents = false; 
+        mainPanel.Padding = new Padding(20);
+        mainPanel.AutoScroll = true;
+        this.Controls.Add(mainPanel);
+
+        // 콤보박스
+        comboBox = new ComboBox();
+        comboBox.Width = 240;
+        comboBox.Font = new Font("Segoe UI", 10, FontStyle.Regular);
+        comboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        comboBox.Margin = new Padding(0, 0, 0, 10);
+        comboBox.DropDownHeight = 220; // 리스트 높이를 200px로
+        comboBox.IntegralHeight = false; // DropDownHeight를 정확히 적용하려면 false
+        mainPanel.Controls.Add(comboBox);
+
+        // CircularProgressBar 별도 Panel에 넣기 (가로 중앙 정렬)
+        Panel cpbPanel = new Panel();
+        cpbPanel.Width = mainPanel.ClientSize.Width; // 패널 폭 = mainPanel 폭
+        cpbPanel.Height = 140;                        // cpb 높이 + 여백
+        cpbPanel.Margin = new Padding(0, 10, 0, 70);
+
+        cpb = new CircularProgressBar();
+        cpb.Size = new Size(120, 120);
+        cpb.Maximum = 100;
+        cpb.Value = 0;
+
+        // 중앙 위치 계산
+        cpb.Location = new Point((cpbPanel.Width - cpb.Width) -210 / 2, 25);
+        cpbPanel.Controls.Add(cpb);
+        cpb.Visible = false;
+
+        mainPanel.Controls.Add(cpbPanel);
+
+        // 버튼 패널 (가로 배치)
+        FlowLayoutPanel buttonPanel = new FlowLayoutPanel();
+        buttonPanel.FlowDirection = FlowDirection.LeftToRight;
+        buttonPanel.Width = mainPanel.ClientSize.Width;
+        buttonPanel.Height = 50;
+        buttonPanel.WrapContents = false;
+        buttonPanel.Margin = new Padding(0, 0, 0, 0);
+
+        // 폴더 선택 버튼
+        loadFileButton = new Button();
+        loadFileButton.Text = "폴더 선택";
+        loadFileButton.Width = 110;
+        loadFileButton.Height = 40;
+        loadFileButton.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        loadFileButton.BackColor = Color.LightSkyBlue;
+        loadFileButton.ForeColor = Color.White;
+        loadFileButton.FlatStyle = FlatStyle.Flat;
+        loadFileButton.FlatAppearance.BorderSize = 0;
+        loadFileButton.Click += LoadFileButton_Click;
+        buttonPanel.Controls.Add(loadFileButton);
+
+        // 분석 시작 버튼
+        resultButton = new Button();
+        resultButton.Text = "분석 시작";
+        resultButton.Width = 110;
+        resultButton.Height = 40;
+        resultButton.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+        resultButton.BackColor = Color.LightSkyBlue;
+        resultButton.ForeColor = Color.White;
+        resultButton.FlatStyle = FlatStyle.Flat;
+        resultButton.FlatAppearance.BorderSize = 0;
+        resultButton.Click += ResultButton_Click;
+        buttonPanel.Controls.Add(resultButton);
+
+        mainPanel.Controls.Add(buttonPanel);
+    }
 
         private void LoadFileButton_Click(object sender, EventArgs e)
         {
@@ -105,6 +165,8 @@ namespace count_dead_sign
             hospitalAfternoonCounts.Clear();
             hospitalTotalCounts.Clear();
 
+            cpb.Visible = true;
+
             await CheckDeadSignAsync();
             var summaryForm = new SaveExcelForm(hospitalMorningCounts, hospitalAfternoonCounts, hospitalTotalCounts);
             summaryForm.ShowDialog();
@@ -121,6 +183,16 @@ namespace count_dead_sign
             string saveFolderPath = Path.Combine(exePath, "EDSD_Data", todayDate);
             if (!Directory.Exists(saveFolderPath))
                 Directory.CreateDirectory(saveFolderPath);
+
+            int totalFiles = selectedFilePaths.Count;
+            int processedFiles = 0;
+
+             // ProgressBar 초기화
+            this.Invoke(new Action(() =>
+            {
+                cpb.Maximum = 100;
+                cpb.Value = 0;
+            }));
 
             // 각 파일별로 Task.Run으로 비동기 작업 생성
             var tasks = selectedFilePaths.Select(file => Task.Run(() =>
@@ -319,6 +391,18 @@ namespace count_dead_sign
                         Log($"[완료] {fileName} 처리 완료, 저장 경로: {saveFilePath}");
                         Log($"[{fileName}] 오전 사망위험군 총 개수: {morningCount}, 오후 사망위험군 총 개수: {afternoonCount}");
 
+                        processedFiles++;
+                         // ProgressBar 초기화
+                        this.Invoke(new Action(() =>
+                        {
+                            //progressBar.Maximum = totalFiles;
+                            cpb.Value = (int)Math.Ceiling((double)processedFiles / totalFiles * 100);
+                            if (cpb.Value == 100)
+                            { 
+                                cpb.Visible = false;
+                            }
+                        }));
+
                         lock (hospitalMorningCounts)
                         {
                             if (!hospitalMorningCounts.ContainsKey(hospitalCode))
@@ -343,35 +427,49 @@ namespace count_dead_sign
                     Log($"[에러] {Path.GetFileName(file)} 처리 실패: {ex.Message}");
                 }
             }));
+            // 모든 작업 완료 후 ProgressBar 100% 유지 후 잠시 대기하고 숨기기
+
+            Log("[완료] 모든 파일 처리 완료!");
 
             // 모든 작업 완료 대기
             await Task.WhenAll(tasks);
         }
 
+
         private void Log(string message)
         {
-            string exePath = AppDomain.CurrentDomain.BaseDirectory; // 실행 경로
-            string todayDate = DateTime.Now.ToString("yyyy-MM-dd");
-
-            // 폴더 경로
-            string logFolder = Path.Combine(exePath, "log");
-            if (!Directory.Exists(logFolder))
-                Directory.CreateDirectory(logFolder);
-
-            // 로그 파일 경로
-            string logFilePath = Path.Combine(logFolder, $"{todayDate}.log");
-
-            // 파일에도 저장
-            try
+            lock (logLock)
             {
-                File.AppendAllText(logFilePath, $"{DateTime.Now:HH:mm:ss} - {message}{Environment.NewLine}");
-            }
-            catch (Exception ex)
-            {
-                // 파일 쓰기 실패 시 콘솔 출력 (혹은 무시 가능)
-                Console.WriteLine($"로그 파일 저장 실패: {ex.Message}");
+                string exePath = AppDomain.CurrentDomain.BaseDirectory;
+                string todayDate = DateTime.Now.ToString("yyyy-MM-dd");
+
+                string logFolder = Path.Combine(exePath, "log");
+                if (!Directory.Exists(logFolder))
+                    Directory.CreateDirectory(logFolder);
+
+                string logFilePath = Path.Combine(logFolder, $"{todayDate}.log");
+
+                string logMessage = $"{DateTime.Now:HH:mm:ss} - {message}";
+
+                try
+                {
+                    using (StreamWriter sw = new StreamWriter(logFilePath, append: true, encoding: System.Text.Encoding.UTF8))
+                    {
+                        sw.WriteLine(logMessage);
+                    }
+                }
+                catch (IOException ex)
+                {
+                    Console.WriteLine($"로그 파일 저장 실패: {ex.Message}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"알 수 없는 오류 발생: {ex.Message}");
+                }
             }
         }
+
+
 
     }
 }
