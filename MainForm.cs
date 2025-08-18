@@ -9,6 +9,8 @@ using OfficeOpenXml.Style;
 using System.Drawing;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Drawing.Drawing2D;
+
 
 namespace count_dead_sign
 {
@@ -21,102 +23,188 @@ namespace count_dead_sign
 
         private List<int> morningCounts = new List<int>();
         private List<int> afternoonCounts = new List<int>();
-        private List<string> room= new List<string>();
+        private List<string> room = new List<string>();
 
         private Dictionary<string, Dictionary<string, List<int>>> hospitalMorningCounts = new Dictionary<string, Dictionary<string, List<int>>>();
         private Dictionary<string, Dictionary<string, List<int>>> hospitalAfternoonCounts = new Dictionary<string, Dictionary<string, List<int>>>();
         private Dictionary<string, Dictionary<string, int>> hospitalTotalCounts = new Dictionary<string, Dictionary<string, int>>();
         private ProgressBar progressBar;
         private readonly object logLock = new object();
-        private FlowLayoutPanel mainPanel; 
+        private FlowLayoutPanel mainPanel;
         private CircularProgressBar cpb;
+        private FlowLayoutPanel horizontalPanel;
+        private RoundedButton roundButton;
+        private string fileDatename;
 
         public MainForm()
         {
             SetupUI();
         }
         private void SetupUI()
-    {
-        // 폼 설정
-        this.Text = "사망위험군 분석 툴";
-        this.Width = 300;
-        this.Height = 400;
-        this.StartPosition = FormStartPosition.CenterScreen;
-        this.BackColor = Color.WhiteSmoke;
+        {
+            // 폼 기본 설정
+            this.Text = "사망위험군 분석 툴";
+            this.Width = 320;
+            this.Height = 350;
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.BackColor = Color.FromArgb(70, 70, 70);
 
-        // 세로 정렬 패널
-        mainPanel = new FlowLayoutPanel();
-        mainPanel.Dock = DockStyle.Fill;
-        mainPanel.FlowDirection = FlowDirection.TopDown;
-        mainPanel.WrapContents = false; 
-        mainPanel.Padding = new Padding(20);
-        mainPanel.AutoScroll = true;
-        this.Controls.Add(mainPanel);
+            // 1. 세로 정렬 메인 패널
+            mainPanel = new FlowLayoutPanel();
+            mainPanel.Dock = DockStyle.Fill;
+            mainPanel.FlowDirection = FlowDirection.TopDown;
+            mainPanel.WrapContents = false;
+            mainPanel.Padding = new Padding(10);
+            mainPanel.AutoScroll = true;
+            mainPanel.AutoScrollMinSize = new Size(0, 0); // 수평 스크롤 강제 비활성화
+            this.Controls.Add(mainPanel);
 
-        // 콤보박스
-        comboBox = new ComboBox();
-        comboBox.Width = 240;
-        comboBox.Font = new Font("Segoe UI", 10, FontStyle.Regular);
-        comboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        comboBox.Margin = new Padding(0, 0, 0, 10);
-        comboBox.DropDownHeight = 220; // 리스트 높이를 200px로
-        comboBox.IntegralHeight = false; // DropDownHeight를 정확히 적용하려면 false
-        mainPanel.Controls.Add(comboBox);
+            // 폼이 로드된 후 실제 크기 계산
+            this.Load += (s, e) =>
+            {
+                int availableWidth = mainPanel.ClientSize.Width - mainPanel.Padding.Horizontal;
 
-        // CircularProgressBar 별도 Panel에 넣기 (가로 중앙 정렬)
-        Panel cpbPanel = new Panel();
-        cpbPanel.Width = mainPanel.ClientSize.Width; // 패널 폭 = mainPanel 폭
-        cpbPanel.Height = 140;                        // cpb 높이 + 여백
-        cpbPanel.Margin = new Padding(0, 10, 0, 70);
+                // 2. 콤보박스 + 폴더 버튼 가로 패널
+                Panel comboButtonWrapper = new Panel();
+                comboButtonWrapper.Height = 50;
+                comboButtonWrapper.Width = availableWidth;
+                comboButtonWrapper.Margin = new Padding(0, 0, 0, 0);
 
-        cpb = new CircularProgressBar();
-        cpb.Size = new Size(120, 120);
-        cpb.Maximum = 100;
-        cpb.Value = 0;
+                horizontalPanel = new FlowLayoutPanel();
+                horizontalPanel.FlowDirection = FlowDirection.LeftToRight;
+                horizontalPanel.WrapContents = false;
+                horizontalPanel.AutoSize = false; // AutoSize 비활성화
+                horizontalPanel.Size = new Size(250, 50); // 고정 크기
 
-        // 중앙 위치 계산
-        cpb.Location = new Point((cpbPanel.Width - cpb.Width) -210 / 2, 25);
-        cpbPanel.Controls.Add(cpb);
-        cpb.Visible = false;
+                // 콤보박스
+                comboBox = new ComboBox();
+                comboBox.Width = 140;
+                comboBox.Font = new Font("Segoe UI", 9, FontStyle.Regular);
+                comboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+                comboBox.DropDownHeight = 200;
+                comboBox.IntegralHeight = false;
+                comboBox.Margin = new Padding(0, 10, 5, 0);
+                horizontalPanel.Controls.Add(comboBox);
 
-        mainPanel.Controls.Add(cpbPanel);
+                // 폴더 선택 버튼
+                RoundedButton loadFileButton = new RoundedButton();
+                loadFileButton.Text = "폴더 선택";
+                loadFileButton.Width = 100;   // 충분히 넓게
+                loadFileButton.Height = 40;
+                loadFileButton.ButtonBackColor = Color.DarkGray; // 버튼 배경
+                loadFileButton.TextColor = Color.White;       // 글자색
+                loadFileButton.BorderColor = Color.FromArgb(70, 70, 70);
+                //loadFileButton.HoverBorderColor = Color.Red;
+                loadFileButton.BorderSize = 1;
+                loadFileButton.CornerRadius = 10; // 덜 둥글게
+                loadFileButton.ShadowOffset = 1;
+                loadFileButton.DepthOffset = 1;
+                loadFileButton.Click += LoadFileButton_Click;
 
-        // 버튼 패널 (가로 배치)
-        FlowLayoutPanel buttonPanel = new FlowLayoutPanel();
-        buttonPanel.FlowDirection = FlowDirection.LeftToRight;
-        buttonPanel.Width = mainPanel.ClientSize.Width;
-        buttonPanel.Height = 50;
-        buttonPanel.WrapContents = false;
-        buttonPanel.Margin = new Padding(0, 0, 0, 0);
+                horizontalPanel.Controls.Add(loadFileButton);
 
-        // 폴더 선택 버튼
-        loadFileButton = new Button();
-        loadFileButton.Text = "폴더 선택";
-        loadFileButton.Width = 110;
-        loadFileButton.Height = 40;
-        loadFileButton.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-        loadFileButton.BackColor = Color.LightSkyBlue;
-        loadFileButton.ForeColor = Color.White;
-        loadFileButton.FlatStyle = FlatStyle.Flat;
-        loadFileButton.FlatAppearance.BorderSize = 0;
-        loadFileButton.Click += LoadFileButton_Click;
-        buttonPanel.Controls.Add(loadFileButton);
 
-        // 분석 시작 버튼
-        resultButton = new Button();
-        resultButton.Text = "분석 시작";
-        resultButton.Width = 110;
-        resultButton.Height = 40;
-        resultButton.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-        resultButton.BackColor = Color.LightSkyBlue;
-        resultButton.ForeColor = Color.White;
-        resultButton.FlatStyle = FlatStyle.Flat;
-        resultButton.FlatAppearance.BorderSize = 0;
-        resultButton.Click += ResultButton_Click;
-        buttonPanel.Controls.Add(resultButton);
 
-        mainPanel.Controls.Add(buttonPanel);
-    }
+                // horizontalPanel 중앙 배치
+                horizontalPanel.Location = new Point(
+                    Math.Max(0, (comboButtonWrapper.Width - horizontalPanel.Width) / 2),
+                    (comboButtonWrapper.Height - horizontalPanel.Height) / 2
+                );
+
+                comboButtonWrapper.Controls.Add(horizontalPanel);
+                mainPanel.Controls.Add(comboButtonWrapper);
+
+                // 3. CircularProgressBar 패널
+                Panel cpbPanel = new Panel();
+                cpbPanel.Height = 140;
+                cpbPanel.Width = availableWidth;
+                cpbPanel.Margin = new Padding(0, 10, 0, 30);
+
+                cpb = new CircularProgressBar();
+                cpb.Size = new Size(120, 120);
+                cpb.Maximum = 100;
+                cpb.Value = 0;
+                cpb.Visible = false;
+                cpb.Location = new Point(
+                    (cpbPanel.Width - cpb.Width) / 2,
+                    (cpbPanel.Height - cpb.Height) / 2
+                );
+
+                cpbPanel.Controls.Add(cpb);
+                mainPanel.Controls.Add(cpbPanel);
+
+                // 4. 분석 시작 버튼 패널
+                Panel resultPanel = new Panel();
+                resultPanel.Height = 50;
+                resultPanel.Width = availableWidth;
+
+                RoundedButton resultButton = new RoundedButton();
+                resultButton.Text = "분석 시작";
+                resultButton.Width = 100;
+                resultButton.Height = 35;
+                resultButton.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+
+                // 버튼 색상
+                resultButton.ButtonBackColor = Color.DarkGray;;
+                resultButton.TextColor = Color.White;
+
+                // border 설정
+                resultButton.BorderSize = 1; // 원하는 굵기
+                resultButton.BorderColor = Color.FromArgb(70, 70, 70);
+
+                // 모서리 둥글기
+                resultButton.CornerRadius = 10;
+
+                // 그림자 옵션 (원하면 조정 가능)
+                resultButton.ShadowOffset = 2;
+                resultButton.DepthOffset = 1;
+                resultButton.ShadowBlur = 6;
+                resultButton.HoverShadowExpand = 0; // hover 시 올라가는 효과 제거
+                resultButton.ShadowColor = Color.FromArgb(40, 0, 0, 0);
+
+                // 위치
+                resultButton.Location = new Point(
+                    (resultPanel.Width - resultButton.Width) / 2,
+                    (resultPanel.Height - resultButton.Height) / 2
+                );
+
+                // 클릭 이벤트
+                resultButton.Click += ResultButton_Click;
+
+                // 패널에 추가
+                resultPanel.Controls.Add(resultButton);
+
+                mainPanel.Controls.Add(resultPanel);
+
+                // 크기 변경 이벤트 추가
+                this.SizeChanged += (sender, args) =>
+                {
+                    int newAvailableWidth = mainPanel.ClientSize.Width - mainPanel.Padding.Horizontal;
+                    comboButtonWrapper.Width = newAvailableWidth;
+                    cpbPanel.Width = newAvailableWidth;
+                    resultPanel.Width = newAvailableWidth;
+
+                    // 위치 재조정
+                    horizontalPanel.Location = new Point(
+                        Math.Max(0, (comboButtonWrapper.Width - horizontalPanel.Width) / 2),
+                        (comboButtonWrapper.Height - horizontalPanel.Height) / 2
+                    );
+
+                    cpb.Location = new Point(
+                        (cpbPanel.Width - cpb.Width) / 2,
+                        (cpbPanel.Height - cpb.Height) / 2
+                    );
+
+                    resultButton.Location = new Point(
+                        (resultPanel.Width - resultButton.Width) / 2,
+                        (resultPanel.Height - resultButton.Height) / 2
+                    );
+                };
+            };
+
+
+
+        }
 
         private void LoadFileButton_Click(object sender, EventArgs e)
         {
@@ -168,7 +256,7 @@ namespace count_dead_sign
             cpb.Visible = true;
 
             await CheckDeadSignAsync();
-            var summaryForm = new SaveExcelForm(hospitalMorningCounts, hospitalAfternoonCounts, hospitalTotalCounts);
+            var summaryForm = new SaveExcelForm(hospitalMorningCounts, hospitalAfternoonCounts, hospitalTotalCounts, fileDatename);
             summaryForm.ShowDialog();
         }
 
@@ -180,14 +268,13 @@ namespace count_dead_sign
 
             string exePath = AppDomain.CurrentDomain.BaseDirectory;
             string todayDate = DateTime.Now.ToString("yyyy-MM-dd");
-            string saveFolderPath = Path.Combine(exePath, "EDSD_Data", todayDate);
-            if (!Directory.Exists(saveFolderPath))
-                Directory.CreateDirectory(saveFolderPath);
+
+
 
             int totalFiles = selectedFilePaths.Count;
             int processedFiles = 0;
 
-             // ProgressBar 초기화
+            // ProgressBar 초기화
             this.Invoke(new Action(() =>
             {
                 cpb.Maximum = 100;
@@ -202,6 +289,21 @@ namespace count_dead_sign
                     string fileName = Path.GetFileName(file);
 
                     var match = Regex.Match(fileName, @"^\d{8}_(\d+_\d+)(?:_([a-zA-Z]+))?\.xlsx$");
+
+                    // 날짜를 분리하기 위한 정규표현식
+                    string pattern = @"^(\d{8})";
+                    var filedate = Regex.Match(fileName, pattern);
+
+                    string datePart = filedate.Groups[1].Value;
+
+                    // yyyyMMdd 형식으로 파싱
+                    DateTime date = DateTime.ParseExact(datePart, "yyyyMMdd", null);
+
+                    // yyyy-MM-dd 형태로 변환
+                    fileDatename = date.ToString("yyyy-MM-dd");
+
+                    string saveFolderPath = Path.Combine(exePath, "EDSD_Data", fileDatename);
+
 
                     if (!match.Success)
                     {
@@ -254,8 +356,8 @@ namespace count_dead_sign
                             return;
                         }
 
-                        int totalRows = ws.Dimension.End.Row;
-                        int dataRows = totalRows - 1;
+                        int totalRows = ws.Dimension.End.Row; // Excel 시트의 총 행 수 확인 (헤더 포함)
+                        int dataRows = totalRows - 1; // 실제 데이터 행 수 (헤더 제외)
 
                         lock (hospitalTotalCounts)
                         {
@@ -264,6 +366,8 @@ namespace count_dead_sign
                             hospitalTotalCounts[hospitalCode][currentRoom] = dataRows;
                         }
 
+
+                        // 각 컬럼의 위치(Index) 찾기
                         int col_breath = headers.IndexOf("breath") + 1;
                         int col_heart = headers.IndexOf("heart_detection") + 1;
                         int col_range = headers.IndexOf("range") + 1;
@@ -280,22 +384,25 @@ namespace count_dead_sign
                         ws.Cells[1, col_sign2].Value = "sign2";
                         ws.Cells[1, col_sign3].Value = "sign3";
 
+
+                        // 각 컬럼의 위치(Index) 찾기
                         int sign3Count = 0;
                         int morningCount = 0;
                         int afternoonCount = 0;
 
                         for (int row = 2; row <= totalRows; row++)
                         {
-                            if (row < 21) continue;
+                            if (row < 21) continue; // 처음 20행을 계산하기 위해 21행 이전은 건너뜀
 
-                            double meanBreath = 0;
-                            int count = 0;
+                            double meanBreath = 0; // 평균 호흡수 계산용
+                            int count = 0; // // 유효 데이터 개수
 
-                            for (int i = row - 19; i <= row; i++)
+                            for (int i = row - 19; i <= row; i++) // 현재 행 포함 최근 20행 반복
                             {
                                 var eVal = ws.Cells[i, col_heart].GetValue<int>();
                                 var dVal = ws.Cells[i, col_breath].GetValue<double>();
-                                if (eVal == 1)
+
+                                if (eVal == 1) // 심박 감지 == 1 인 경우만 평균에 포함
                                 {
                                     meanBreath += dVal;
                                     count++;
@@ -303,7 +410,7 @@ namespace count_dead_sign
                             }
 
                             if (count > 0)
-                                meanBreath = Math.Round(meanBreath / count, 2);
+                                meanBreath = Math.Round(meanBreath / count, 2); //heartdetection 1인 경우 호흡 평균 계산
 
                             ws.Cells[row, col_sign1].Value = meanBreath;
                             ws.Cells[row, col_sign1].Style.Numberformat.Format = "0";
@@ -320,14 +427,23 @@ namespace count_dead_sign
                                 int sign2 = 0;
                                 string baseRoom = currentRoom.Split('_')[0];
 
-                                if (checkRoomList.Contains(baseRoom))
+                                if (checkRoomList.Contains(baseRoom)) // yn 3층인 경우
                                 {
                                     sign2 = (
                                         d > 0 &&
                                         e == 1 &&
                                         Math.Round(d, 2) <= 0.85 * l &&
                                         Math.Abs(g - 1.66) < 0.0001 &&
-                                        (h < 95 || d < 11) &&
+                                        (h < 95 || d < 10) &&
+                                        j > 200000
+                                    ) ? 1 : 0;
+                                }else if(hospitalCode == "h" || hospitalCode == "jj" || hospitalCode == "gj"){
+                                    sign2 = (
+                                        d > 0 &&
+                                        e == 1 &&
+                                        Math.Round(d, 2) <= 0.85 * l &&
+                                        Math.Abs(g - 1.44) < 0.0001 &&
+                                        (h < 95 || d < 10) &&
                                         j > 200000
                                     ) ? 1 : 0;
                                 }
@@ -338,7 +454,7 @@ namespace count_dead_sign
                                         e == 1 &&
                                         Math.Round(d, 2) <= 0.85 * l &&
                                         Math.Abs(g - 1.77) < 0.0001 &&
-                                        (h < 95 || d < 11) &&
+                                        (h < 95 || d < 10) &&
                                         j > 200000
                                     ) ? 1 : 0;
                                 }
@@ -385,6 +501,9 @@ namespace count_dead_sign
                         string lastColLetter = ws.Cells[1, col_sign3].Address.Substring(0, 1);
                         ws.Cells[$"A1:{lastColLetter}1"].AutoFilter = true;
 
+                        if (!Directory.Exists(saveFolderPath))
+                            Directory.CreateDirectory(saveFolderPath);
+
                         string saveFilePath = Path.Combine(saveFolderPath, fileName);
                         package.SaveAs(new FileInfo(saveFilePath));
 
@@ -392,13 +511,13 @@ namespace count_dead_sign
                         Log($"[{fileName}] 오전 사망위험군 총 개수: {morningCount}, 오후 사망위험군 총 개수: {afternoonCount}");
 
                         processedFiles++;
-                         // ProgressBar 초기화
+                        // ProgressBar 초기화
                         this.Invoke(new Action(() =>
                         {
                             //progressBar.Maximum = totalFiles;
                             cpb.Value = (int)Math.Ceiling((double)processedFiles / totalFiles * 100);
                             if (cpb.Value == 100)
-                            { 
+                            {
                                 cpb.Visible = false;
                             }
                         }));

@@ -100,7 +100,7 @@ namespace count_dead_sign
             // 가운데 % 텍스트
             string percent = $"{(int)((float)_value / _maxValue * 100)}%";
             using (Font font = new Font(this.Font.FontFamily, 14, FontStyle.Bold))
-            using (Brush brush = new SolidBrush(Color.Black))
+            using (Brush brush = new SolidBrush(Color.White))
             {
                 SizeF textSize = e.Graphics.MeasureString(percent, font);
                 e.Graphics.DrawString(
